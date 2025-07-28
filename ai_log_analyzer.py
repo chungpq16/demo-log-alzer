@@ -45,23 +45,9 @@ class AILogAnalyzer:
         self.severity_levels = ['CRITICAL', 'HIGH']
         
     def setup_logging(self):
-        """Configure logging with debug level support"""
-        # Get log level from environment variable, default to INFO
-        log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
-        
-        # Map string level to logging constant
-        level_map = {
-            'DEBUG': logging.DEBUG,
-            'INFO': logging.INFO,
-            'WARNING': logging.WARNING,
-            'ERROR': logging.ERROR,
-            'CRITICAL': logging.CRITICAL
-        }
-        
-        level = level_map.get(log_level, logging.INFO)
-        
+        """Configure logging"""
         logging.basicConfig(
-            level=level,
+            level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s',
             handlers=[
                 logging.FileHandler('ai_log_analyzer.log'),
@@ -69,7 +55,6 @@ class AILogAnalyzer:
             ]
         )
         self.logger = logging.getLogger(__name__)
-        self.logger.info(f"📝 Logging initialized at {log_level} level")
         
     def setup_ai_client(self):
         """Setup OpenAI client"""
@@ -294,97 +279,9 @@ Focus on: Error patterns, performance bottlenecks, security issues, resource pro
                 'file_path': log_file_path
             }
             
-    async def test_teams_webhook(self) -> bool:
-        """
-        Test Teams webhook with a simple message to validate configuration
-        
-        Returns:
-            Success status
-        """
-        if not self.teams_webhook:
-            self.logger.error("❌ No Teams webhook URL configured")
-            return False
-            
-        self.logger.info("🧪 Testing Teams webhook configuration...")
-        
-        # Simple test message
-        test_message = {
-            "@type": "MessageCard",
-            "@context": "https://schema.org/extensions",
-            "summary": "AI Log Analyzer - Webhook Test",
-            "themeColor": "0078D4",
-            "sections": [
-                {
-                    "activityTitle": "🧪 Webhook Configuration Test",
-                    "activitySubtitle": "AI Log Analyzer",
-                    "facts": [
-                        {"name": "Test Time", "value": datetime.utcnow().isoformat()},
-                        {"name": "Status", "value": "Testing webhook connectivity"}
-                    ],
-                    "text": "This is a test message to verify your Teams webhook is working correctly."
-                }
-            ]
-        }
-        
-        try:
-            self.logger.debug(f"🔍 DEBUG: Testing webhook URL: {self.teams_webhook}")
-            
-            # Validate URL format
-            if not self.teams_webhook.startswith('https://'):
-                self.logger.error("❌ Webhook URL must start with https://")
-                return False
-                
-            # Check if it looks like a Teams webhook
-            valid_domains = ['webhook.office.com', 'outlook.office.com', 'outlook.office365.com']
-            if not any(domain in self.teams_webhook for domain in valid_domains):
-                self.logger.warning(f"⚠️ URL doesn't appear to be a Teams webhook. Expected domains: {valid_domains}")
-                
-            response = requests.post(
-                self.teams_webhook,
-                headers={'Content-Type': 'application/json'},
-                json=test_message,
-                timeout=10
-            )
-            
-            self.logger.debug(f"🔍 DEBUG: Test response status: {response.status_code}")
-            self.logger.debug(f"🔍 DEBUG: Test response text: {response.text}")
-            
-            if response.status_code == 200:
-                self.logger.info("✅ Teams webhook test successful!")
-                return True
-            elif response.status_code == 405:
-                self.logger.error("❌ Webhook test failed with 405 Method Not Allowed")
-                self.logger.error("🔧 Common causes:")
-                self.logger.error("   • Webhook URL is incorrect or malformed")
-                self.logger.error("   • Webhook was created for wrong connector type")
-                self.logger.error("   • Webhook has been disabled or expired")
-                self.logger.error("   • URL was copied incorrectly (missing parts)")
-                return False
-            elif response.status_code == 400:
-                self.logger.error("❌ Webhook test failed with 400 Bad Request")
-                self.logger.error("🔧 This usually means the message format is invalid")
-                return False
-            elif response.status_code == 404:
-                self.logger.error("❌ Webhook test failed with 404 Not Found")
-                self.logger.error("🔧 The webhook URL doesn't exist or has been deleted")
-                return False
-            else:
-                self.logger.error(f"❌ Webhook test failed with status {response.status_code}")
-                return False
-                
-        except requests.exceptions.Timeout:
-            self.logger.error("❌ Webhook test timed out")
-            return False
-        except requests.exceptions.ConnectionError:
-            self.logger.error("❌ Cannot connect to webhook URL")
-            return False
-        except Exception as e:
-            self.logger.error(f"❌ Webhook test error: {e}")
-            return False
-
     async def send_teams_notification(self, analysis_result: Dict) -> bool:
         """
-        Send notification to MS Teams with comprehensive debugging
+        Send notification to MS Teams
         
         Args:
             analysis_result: Analysis results from AI
@@ -392,29 +289,18 @@ Focus on: Error patterns, performance bottlenecks, security issues, resource pro
         Returns:
             Success status
         """
-        self.logger.debug("🔍 DEBUG: Starting Teams notification process")
-        self.logger.debug(f"🔍 DEBUG: Analysis result keys: {list(analysis_result.keys())}")
-        
         if not self.teams_webhook:
             self.logger.warning("⚠️ MS Teams webhook URL not configured")
-            self.logger.debug("🔍 DEBUG: Teams webhook URL is empty or None")
             return False
-        
-        self.logger.debug(f"🔍 DEBUG: Teams webhook URL configured: {self.teams_webhook[:50]}...")
             
         # Extract log type from metadata
         log_type = analysis_result.get('metadata', {}).get('log_type', 'unknown')
-        self.logger.debug(f"🔍 DEBUG: Extracted log type: {log_type}")
         
         if analysis_result['status'] != 'success':
-            self.logger.debug(f"🔍 DEBUG: Analysis failed, sending error notification")
             return await self._send_error_notification(analysis_result, log_type)
             
         analysis = analysis_result['analysis']
         severity = analysis.get('severity', 'UNKNOWN')
-        
-        self.logger.debug(f"🔍 DEBUG: Analysis severity: {severity}")
-        self.logger.debug(f"🔍 DEBUG: Analysis keys: {list(analysis.keys())}")
         
         # Choose color based on severity
         color_map = {
@@ -425,7 +311,6 @@ Focus on: Error patterns, performance bottlenecks, security issues, resource pro
         }
         
         color = color_map.get(severity, 'Gray')
-        self.logger.debug(f"🔍 DEBUG: Selected color for severity '{severity}': {color}")
         
         # Create Teams message card
         teams_message = {
@@ -449,12 +334,9 @@ Focus on: Error patterns, performance bottlenecks, security issues, resource pro
             ]
         }
         
-        self.logger.debug(f"🔍 DEBUG: Base Teams message created with {len(teams_message['sections'])} sections")
-        
         # Add error patterns section
         if analysis.get('error_patterns'):
             error_patterns = analysis['error_patterns'][:3]  # Show top 3
-            self.logger.debug(f"🔍 DEBUG: Adding {len(error_patterns)} error patterns to Teams message")
             
             error_text = "\n".join([
                 f"• **{pattern['type']}**: {pattern['count']} occurrences ({pattern['severity']})"
@@ -464,12 +346,10 @@ Focus on: Error patterns, performance bottlenecks, security issues, resource pro
                 "activityTitle": "🔍 Error Patterns Detected",
                 "text": error_text
             })
-            self.logger.debug(f"🔍 DEBUG: Error patterns text: {error_text[:100]}...")
             
         # Add immediate actions section
         if analysis.get('immediate_actions'):
             immediate_actions = analysis['immediate_actions'][:3]  # Show top 3
-            self.logger.debug(f"🔍 DEBUG: Adding {len(immediate_actions)} immediate actions to Teams message")
             
             action_text = "\n".join([
                 f"• **{action['priority']}**: {action['action']} (ETA: {action.get('estimated_time', 'Unknown')})"
@@ -479,18 +359,8 @@ Focus on: Error patterns, performance bottlenecks, security issues, resource pro
                 "activityTitle": "⚡ Immediate Actions Required",
                 "text": action_text
             })
-            self.logger.debug(f"🔍 DEBUG: Actions text: {action_text[:100]}...")
-            
-        self.logger.debug(f"🔍 DEBUG: Final Teams message has {len(teams_message['sections'])} sections")
-        self.logger.debug(f"🔍 DEBUG: Teams message size: {len(str(teams_message))} characters")
         
         try:
-            self.logger.debug(f"🔍 DEBUG: Preparing to send POST request to Teams webhook")
-            self.logger.debug(f"🔍 DEBUG: Webhook URL: {self.teams_webhook}")
-            self.logger.debug(f"🔍 DEBUG: Request headers: {{'Content-Type': 'application/json'}}")
-            self.logger.debug(f"🔍 DEBUG: Request timeout: 10 seconds")
-            self.logger.debug(f"🔍 DEBUG: Message payload preview: {str(teams_message)[:300]}...")
-            
             # Validate webhook URL format
             if not self.teams_webhook.startswith('https://'):
                 self.logger.error(f"❌ Invalid webhook URL format: {self.teams_webhook}")
@@ -506,14 +376,8 @@ Focus on: Error patterns, performance bottlenecks, security issues, resource pro
                 timeout=10
             )
             
-            self.logger.debug(f"🔍 DEBUG: Teams webhook response status: {response.status_code}")
-            self.logger.debug(f"🔍 DEBUG: Teams webhook response headers: {dict(response.headers)}")
-            self.logger.debug(f"🔍 DEBUG: Teams webhook response text: {response.text}")
-            self.logger.debug(f"🔍 DEBUG: Teams webhook response URL: {response.url}")
-            
             if response.status_code == 200:
                 self.logger.info("✅ MS Teams notification sent successfully")
-                self.logger.debug("🔍 DEBUG: Teams notification completed successfully")
                 return True
             elif response.status_code == 405:
                 self.logger.error(f"❌ Teams webhook returned 405 Method Not Allowed")
@@ -525,38 +389,26 @@ Focus on: Error patterns, performance bottlenecks, security issues, resource pro
                 return False
             else:
                 self.logger.error(f"❌ Teams notification failed: {response.status_code}")
-                self.logger.debug(f"🔍 DEBUG: Teams webhook failed with status {response.status_code}")
-                self.logger.debug(f"🔍 DEBUG: Full response content: {response.text}")
                 return False
                 
         except requests.exceptions.Timeout as e:
             self.logger.error(f"❌ Teams notification timeout: {e}")
-            self.logger.debug(f"🔍 DEBUG: Request timed out after 10 seconds")
             return False
         except requests.exceptions.ConnectionError as e:
             self.logger.error(f"❌ Teams notification connection error: {e}")
-            self.logger.debug(f"🔍 DEBUG: Connection error - check webhook URL and network")
             return False
         except requests.exceptions.RequestException as e:
             self.logger.error(f"❌ Teams notification request error: {e}")
-            self.logger.debug(f"🔍 DEBUG: General request exception: {type(e).__name__}")
             return False
         except Exception as e:
             self.logger.error(f"❌ Failed to send Teams notification: {e}")
-            self.logger.debug(f"🔍 DEBUG: Unexpected error: {type(e).__name__} - {str(e)}")
             return False
             
     async def _send_error_notification(self, analysis_result: Dict, log_type: str) -> bool:
-        """Send error notification to Teams with debug logging"""
-        self.logger.debug("🔍 DEBUG: Starting error notification to Teams")
-        
+        """Send error notification to Teams"""
         if not self.teams_webhook:
-            self.logger.debug("🔍 DEBUG: No Teams webhook configured for error notification")
             return False
             
-        self.logger.debug(f"🔍 DEBUG: Creating error notification for log type: {log_type}")
-        self.logger.debug(f"🔍 DEBUG: Error details: {analysis_result.get('error', 'Unknown error')}")
-        
         error_message = {
             "@type": "MessageCard",
             "@context": "https://schema.org/extensions",
@@ -576,12 +428,7 @@ Focus on: Error patterns, performance bottlenecks, security issues, resource pro
             ]
         }
         
-        self.logger.debug(f"🔍 DEBUG: Error message payload size: {len(str(error_message))} characters")
-        
         try:
-            self.logger.debug("🔍 DEBUG: Sending error notification to Teams webhook")
-            self.logger.debug(f"🔍 DEBUG: Error webhook URL: {self.teams_webhook}")
-            
             response = requests.post(
                 self.teams_webhook, 
                 json=error_message, 
@@ -589,22 +436,18 @@ Focus on: Error patterns, performance bottlenecks, security issues, resource pro
                 timeout=10
             )
             
-            self.logger.debug(f"🔍 DEBUG: Error notification response status: {response.status_code}")
-            self.logger.debug(f"🔍 DEBUG: Error notification response: {response.text}")
-            
             success = response.status_code == 200
             if success:
-                self.logger.debug("🔍 DEBUG: Error notification sent successfully")
+                self.logger.info("✅ Error notification sent successfully")
             elif response.status_code == 405:
                 self.logger.error(f"❌ Error notification webhook returned 405 Method Not Allowed")
                 self.logger.error(f"🔧 Please check your Teams webhook URL configuration")
             else:
-                self.logger.debug(f"🔍 DEBUG: Error notification failed with status {response.status_code}")
+                self.logger.error(f"❌ Error notification failed with status {response.status_code}")
                 
             return success
         except Exception as e:
             self.logger.error(f"❌ Failed to send error notification: {e}")
-            self.logger.debug(f"🔍 DEBUG: Exception in error notification: {type(e).__name__} - {str(e)}")
             return False
             
     async def run_analysis(self) -> Dict:
@@ -673,21 +516,9 @@ async def main():
     print(f"🎲 Randomly selecting from: {list(analyzer.log_types.keys())}")
     print(f"🎲 Severity levels: {analyzer.severity_levels}")
     
-    # Test Teams webhook if configured
-    if analyzer.teams_webhook:
-        print(f"\n🧪 Testing Teams webhook configuration...")
-        webhook_test = await analyzer.test_teams_webhook()
-        if not webhook_test:
-            print("\n⚠️ Teams webhook test failed! Check your configuration.")
-            print("💡 You can still proceed, but Teams notifications won't work.")
-            proceed = input("\nContinue anyway? (y/N): ").strip().lower()
-            if proceed not in ['y', 'yes']:
-                print("❌ Cancelled by user.")
-                return
-        else:
-            print("✅ Teams webhook is working correctly!")
-    else:
-        print("\n⚠️ Teams webhook not configured (optional)")
+    # Show webhook configuration status
+    webhook_status = "✅ Configured" if analyzer.teams_webhook else "❌ Not configured"
+    print(f"🔗 Teams webhook: {webhook_status}")
     
     # Ask user if they want to proceed
     proceed = input(f"\n🚀 Ready to generate and analyze random logs? (y/N): ").strip().lower()
@@ -736,36 +567,10 @@ async def main():
     print(f"\nTotal time: {result.get('total_time_seconds', 0):.2f} seconds")
     print(f"📁 Generated log file available at: {result.get('log_file_path', 'N/A')}")
 
-# Webhook testing utility
-async def test_webhook():
-    """Standalone webhook testing function"""
-    print("🧪 Teams Webhook Tester")
-    print("=" * 30)
-    
-    analyzer = AILogAnalyzer()
-    result = await analyzer.test_teams_webhook()
-    
-    if result:
-        print("\n✅ Webhook test successful! Check your Teams channel for the test message.")
-    else:
-        print("\n❌ Webhook test failed. Please check your configuration.")
-        print("\n🔧 Troubleshooting steps:")
-        print("1. Verify your Teams webhook URL in the .env file")
-        print("2. Make sure the webhook hasn't expired")
-        print("3. Check that the connector is still active in Teams")
-        print("4. Ensure the URL is complete and not truncated")
-
 if __name__ == "__main__":
     # Environment variables can be set in .env file:
     # OPENAI_API_KEY=your-openai-api-key
     # TEAMS_WEBHOOK_URL=your-teams-webhook-url
     # LOG_DIR=./generated_logs (optional, defaults to ./generated_logs)
-    # LOG_LEVEL=DEBUG (for detailed webhook debugging)
     
-    import sys
-    
-    # Check if user wants to test webhook only
-    if len(sys.argv) > 1 and sys.argv[1] == 'test-webhook':
-        asyncio.run(test_webhook())
-    else:
-        asyncio.run(main())
+    asyncio.run(main())
